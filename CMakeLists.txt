@@ -6,6 +6,7 @@ project(bos_raspi_dht)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  rospy
   std_msgs
 )
 
@@ -64,10 +65,10 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs
-# )
+#generate_messages(
+#  DEPENDENCIES
+#  std_msgs
+#)
 
 ###################################
 ## catkin specific configuration ##
@@ -93,7 +94,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories(
-  ${catkin_INCLUDE_DIRS}
+  include ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a cpp library
@@ -160,3 +161,8 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable(bos_raspi_dht_node src/bos_raspi_dht_node.cpp)
+target_link_libraries(bos_raspi_dht_node ${catkin_LIBRARIES} bcm2835)
+#add_dependencies(bos_raspi_dht_node bos_raspi_dht_node_generate_messages_cpp)
+

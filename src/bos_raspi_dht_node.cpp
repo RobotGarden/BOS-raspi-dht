@@ -1,3 +1,5 @@
+//  ROS Building Operating System digital temperature and humidity
+//  sensor driver based on:
 //  How to access GPIO registers from C-code on the Raspberry-Pi
 //  Example program
 //  15-January-2012
@@ -25,6 +27,9 @@
 #include <bcm2835.h>
 #include <unistd.h>
 
+#include "ros/ros.h"
+#include "std_msgs/Float32.h"
+
 #define MAXTIMINGS 100
 
 //#define DEBUG
@@ -33,37 +38,61 @@
 #define DHT22 22
 #define AM2302 22
 
-int readDHT(int type, int pin);
 
-int main(int argc, char **argv)
-{
-  if (!bcm2835_init())
-        return 1;
+int readDHT(int type, int pin, float* t, float* h);
 
-  if (argc != 3) {
-	printf("usage: %s [11|22|2302] GPIOpin#\n", argv[0]);
-	printf("example: %s 2302 4 - Read from an AM2302 connected to GPIO #4\n", argv[0]);
-	return 2;
+int main(int argc, char **argv) {
+
+  if (!bcm2835_init()) return 1;
+
+  if (argc < 3) {
+    printf("usage: %s {11|22|2302} GPIOpin# [ROS Parameters]\n", argv[0]);
+    printf("example: %s 2302 4 - Read from an AM2302 connected to GPIO #4\n", argv[0]);
+    return 2;
   }
+
   int type = 0;
   if (strcmp(argv[1], "11") == 0) type = DHT11;
   if (strcmp(argv[1], "22") == 0) type = DHT22;
   if (strcmp(argv[1], "2302") == 0) type = AM2302;
   if (type == 0) {
-	printf("Select 11, 22, 2302 as type!\n");
-	return 3;
+    printf("Select 11, 22, 2302 as type!\n");
+    return 3;
   }
   
   int dhtpin = atoi(argv[2]);
-
   if (dhtpin <= 0) {
-	printf("Please select a valid GPIO pin #\n");
-	return 3;
+     printf("Please select a valid GPIO pin #\n");
+     return 3;
   }
 
-
   printf("Using pin #%d\n", dhtpin);
-  readDHT(type, dhtpin);
+
+  ros::init(argc, argv, "raspi_dht");
+
+  ros::NodeHandle n;
+
+  ros::Publisher temperature_pub = n.advertise<std_msgs::Float32>("temperature", 1);
+  ros::Publisher humidity_pub    = n.advertise<std_msgs::Float32>("humidity", 1);
+
+  ros::Rate loop_rate(0.016);
+
+  while (ros::ok()) {
+    std_msgs::Float32 temperature_msg, humidity_msg;
+    float t, h;
+
+    if (readDHT(type, dhtpin, &t, &h)) {
+      temperature_msg.data = t;
+      temperature_pub.publish(temperature_msg);
+      humidity_msg.data = h;
+      humidity_pub.publish(humidity_msg);
+    }
+
+    ros::spinOnce();
+
+    loop_rate.sleep();
+  }
+
   return 0;
 
 } // main
@@ -72,7 +101,7 @@ int main(int argc, char **argv)
 int bits[250], data[100];
 int bitidx = 0;
 
-int readDHT(int type, int pin) {
+int readDHT(int type, int pin, float* t, float* h) {
   int counter = 0;
   int laststate = HIGH;
   int j=0;
@@ -124,22 +153,26 @@ int readDHT(int type, int pin) {
   }
 #endif
 
-  printf("Data (%d): 0x%x 0x%x 0x%x 0x%x 0x%x\n", j, data[0], data[1], data[2], data[3], data[4]);
-
   if ((j >= 39) &&
       (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) ) {
-     // yay!
-     if (type == DHT11)
-	printf("Temp = %d *C, Hum = %d \%\n", data[2], data[0]);
+    // yay!
+    if (type == DHT11) {
+      *t = (float)data[2];
+      *h = (float)data[0];
+#ifdef DEBUG
+      printf("Temp = %d *C, Hum = %d \%\n", data[2], data[0]);
+#endif
+    }
      if (type == DHT22) {
-	float f, h;
-	h = data[0] * 256 + data[1];
-	h /= 10;
+	*h = data[0] * 256 + data[1];
+	*h /= 10;
 
-	f = (data[2] & 0x7F)* 256 + data[3];
-        f /= 10.0;
-        if (data[2] & 0x80)  f *= -1;
-	printf("Temp =  %.1f *C, Hum = %.1f \%\n", f, h);
+	*t = (data[2] & 0x7F)* 256 + data[3];
+        *t /= 10.0;
+        if (data[2] & 0x80) *t *= -1;
+#ifdef DEBUG
+	printf("Temp =  %.1f *C, Hum = %.1f \%\n", *t, *h);
+#endif
     }
     return 1;
   }
