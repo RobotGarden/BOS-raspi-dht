@@ -32,7 +32,7 @@
 
 #define MAXTIMINGS 100
 
-//#define DEBUG
+#define DEBUG
 
 #define DHT11 11
 #define DHT22 22
@@ -76,21 +76,27 @@ int main(int argc, char **argv) {
   ros::Publisher humidity_pub    = n.advertise<std_msgs::Float32>("humidity", 1);
 
   ros::Rate loop_rate(0.016);
+  ros::Duration retry_interval(5.0);
 
   while (ros::ok()) {
     std_msgs::Float32 temperature_msg, humidity_msg;
     float t, h;
+
+    ros::spinOnce();
 
     if (readDHT(type, dhtpin, &t, &h)) {
       temperature_msg.data = t;
       temperature_pub.publish(temperature_msg);
       humidity_msg.data = h;
       humidity_pub.publish(humidity_msg);
+      loop_rate.sleep();
     }
-
-    ros::spinOnce();
-
-    loop_rate.sleep();
+    else {
+#ifdef DEBUG
+      printf("No data, retrying soon\n");
+#endif
+      retry_interval.sleep();
+    }
   }
 
   return 0;
