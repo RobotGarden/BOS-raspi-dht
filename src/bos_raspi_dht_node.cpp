@@ -32,7 +32,7 @@
 
 #define MAXTIMINGS 100
 
-#define DEBUG
+//#define DEBUG
 
 #define DHT11 11
 #define DHT22 22
@@ -72,30 +72,42 @@ int main(int argc, char **argv) {
 
   ros::NodeHandle n;
 
-  ros::Publisher temperature_pub = n.advertise<std_msgs::Float32>("temperature", 1);
-  ros::Publisher humidity_pub    = n.advertise<std_msgs::Float32>("humidity", 1);
+  ros::Publisher temperature_pub = n.advertise<std_msgs::Float32>("temperature", 2);
+  ros::Publisher humidity_pub    = n.advertise<std_msgs::Float32>("humidity", 2);
 
   ros::Rate loop_rate(0.016);
   ros::Duration retry_interval(5.0);
+  ros::Duration backoff_interval(200);
+
+  bool last_had_data = true;
 
   while (ros::ok()) {
     std_msgs::Float32 temperature_msg, humidity_msg;
     float t, h;
 
-    ros::spinOnce();
-
     if (readDHT(type, dhtpin, &t, &h)) {
       temperature_msg.data = t;
-      temperature_pub.publish(temperature_msg);
       humidity_msg.data = h;
+#ifdef DEBUG
+      printf("Publishing data: t=%f, h=%f\n", t, h);
+      ROS_INFO("BOS_RASPI_DHT_NODE: %f, %f", t, h);
+#endif
+      temperature_pub.publish(temperature_msg);
       humidity_pub.publish(humidity_msg);
+      ros::spinOnce();
       loop_rate.sleep();
+      last_had_data = true;
     }
     else {
-#ifdef DEBUG
-      printf("No data, retrying soon\n");
-#endif
-      retry_interval.sleep();
+      if (last_had_data) {
+	ROS_INFO("BOS_raspi_DHT_node: no data, retrying soon");
+	retry_interval.sleep();
+      }
+      else {
+	ROS_INFO("BOS_raspi_DHT_node: no data, waiting a while");
+	backoff_interval.sleep();
+      }
+      last_had_data = false;
     }
   }
 
